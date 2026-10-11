@@ -44,6 +44,16 @@ def make_move():
             "success": False,
             "message": "Game is already over"
         })
+    #extra 1
+    # Check the game mode
+    mode = data.get('mode', 'human-ai')
+
+    # Human vs AI: only X is controlled by the human
+    if mode == 'human-ai' and game.current_player != 'X':
+        return jsonify({
+            "success": False,
+            "message": "Please wait for the AI"
+        })
 
     success = game.make_move(position)
 
@@ -118,7 +128,49 @@ def ai_move():
         "move_scores": move_scores,
         "position": position
     })
+# Step 32 - Interactive AI vs AI
+@app.route('/ai-vs-ai-move', methods=['POST'])
+def ai_vs_ai_move():
+    if game.is_game_over():
+        return jsonify({
+            "success": False,
+            "message": "Game is over"
+        })
 
+    data = request.get_json(silent=True) or {}
+
+    # Choose the agent for the current player
+    player = game.current_player
+
+    if player == 'X':
+        agent_type = data.get('agent1', 'minimax')
+    else:
+        agent_type = data.get('agent2', 'random')
+
+    if agent_type == 'minimax':
+        agent = MinimaxAgent(player, use_alpha_beta=True)
+    elif agent_type == 'heuristic':
+        agent = HeuristicAgent(player)
+    else:
+        agent = RandomAgent(player)
+
+    # Calculate the AI move
+    position = agent.get_move(game)
+
+    if position is None:
+        return jsonify({"success": False})
+
+    success = game.make_move(position)
+
+    return jsonify({
+        "success": success,
+        "board": game.board,
+        "current_player": game.current_player,
+        "winner": game.check_winner(),
+        "game_over": game.is_game_over(),
+        "position": position,
+        "nodes_explored": agent.nodes_explored if agent_type == 'minimax' else 0
+    })
 # Step 27 - Bot-versus-Bot Benchmarking
 @app.route('/benchmark', methods=['POST'])
 def benchmark():

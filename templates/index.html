@@ -44,7 +44,30 @@
 <body>
     <!-- Main heading of the application -->
     <h1>Tic-Tac-Toe AI Visualizer</h1>
+    <label for="gameMode">Game Mode:</label>
+    <select id="gameMode">
+        <option value="human-ai">Human vs AI</option>
+        <option value="local">2-Player Local</option>
+        <option value="ai-ai">AI vs AI</option>
+    </select>
+    <div id="ai-ai-controls">
+    <label for="ai-x-select">AI Player X:</label>
+    <select id="ai-x-select">
+        <option value="random">Random</option>
+        <option value="heuristic">Heuristic</option>
+        <option value="minimax" selected>Minimax</option>
+    </select>
 
+    <label for="ai-o-select">AI Player O:</label>
+    <select id="ai-o-select">
+        <option value="random" selected>Random</option>
+        <option value="heuristic">Heuristic</option>
+        <option value="minimax">Minimax</option>
+    </select>
+    <button id="start-ai-ai-btn" type="button">
+    Start AI vs AI
+    </button>
+    </div>
     <!-- Short description of the application -->
     <p>Play against Random, Heuristic, or Minimax AI.</p>
     <!-- Select the AI opponent -->
@@ -71,8 +94,18 @@
         <button class="cell" id="cell-7"></button>
         <button class="cell" id="cell-8"></button>
     </div>
+    <!-- Display the current game status -->
+    <p id="game-status">Current turn: X</p>
+
+    <p id="nodes-explored">Nodes explored: 0</p>
     <!-- Button to start a new game -->
     <button id="reset-btn">Reset Game</button>
+
+     <!-- Minimax move score visualization -->
+    <h3>Minimax Move Scores (Before AI Move)</h3>
+    <p>Positive = AI win | 0 = Draw | Negative = AI loss. Higher scores are better for the AI.</p>
+    <div id="score-matrix"></div>
+
     <!-- Step 27: Bot-versus-Bot Benchmarking -->
     <h3>Bot-versus-Bot Benchmarking</h3>
 
@@ -95,15 +128,9 @@
 
     <p id="benchmark-results"></p>
 
-    <!-- Display the current game status -->
-    <p id="game-status">Current turn: X</p>
+    
 
-    <p id="nodes-explored">Nodes explored: 0</p>
-
-    <!-- Minimax move score visualization -->
-    <h3>Minimax Move Scores (Before AI Move)</h3>
-    <p>Positive = AI win | 0 = Draw | Negative = AI loss. Higher scores are better for the AI.</p>
-    <div id="score-matrix"></div>
+   
 
     <!-- JavaScript for handling cell clicks -->
     <script>
@@ -114,8 +141,13 @@
         for (let i = 0; i < cells.length; i++) {
             cells[i].addEventListener('click', async function() {
                 // Prevent another click while the AI is playing
-                if (isProcessing || 
-                    document.getElementById('game-status').textContent !== "Current turn: X") {
+                //extra 2
+                const mode = document.getElementById('gameMode').value;
+                const statusText = document.getElementById('game-status').textContent;
+
+                if (isProcessing ||
+                    !statusText.startsWith("Current turn:") ||
+                    (mode === 'human-ai' && statusText !== "Current turn: X")) {
                     return;
                 }
 
@@ -124,7 +156,7 @@
                 const response = await fetch('/move', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({position: i})
+                    body: JSON.stringify({position: i, mode: mode})
                 });
 
         // Receive the updated game state
@@ -152,7 +184,8 @@
             }
         }
         // Let the AI respond after the human plays
-        if (data.success && !data.game_over) 
+        //extra 3
+        if (data.success && !data.game_over && mode === 'human-ai')
         {
         
 
@@ -272,6 +305,100 @@
                 ' | ' + agent2 + ' (O) wins: ' + data.agent2_wins +
                 ' | Draws: ' + data.draws;
             });
+    // Step 32 - Interactive AI vs AI
+        document.getElementById('start-ai-ai-btn')
+            .addEventListener('click', async function() {
+
+            if (isProcessing) return;
+
+            if (document.getElementById('gameMode').value !== 'ai-ai') {
+                alert('Please select AI vs AI mode.');
+                return;
+            }
+
+            isProcessing = true;
+
+            try {
+                // Start with a new board
+                const resetResponse = await fetch('/reset', {
+                    method: 'POST'
+                });
+                const resetData = await resetResponse.json();
+
+                for (let i = 0; i < cells.length; i++) {
+                    cells[i].textContent = resetData.board[i];
+                }
+
+                document.getElementById('game-status').textContent =
+                    'Current turn: X';
+                document.getElementById('nodes-explored').textContent =
+                    'Nodes explored: 0';
+                document.getElementById('score-matrix').innerHTML = '';
+
+                // Use the AI vs AI agent selections
+                const agent1 = document.getElementById('ai-x-select').value;
+                const agent2 = document.getElementById('ai-o-select').value;
+
+                // Play one move at a time
+                for (let turn = 0; turn < 9; turn++) {
+                    const response = await fetch('/ai-vs-ai-move', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({
+                            agent1: agent1,
+                            agent2: agent2
+                        })
+                    });
+
+                    const data = await response.json();
+
+                    if (!data.success) break;
+
+                    for (let i = 0; i < cells.length; i++) {
+                        cells[i].textContent = data.board[i];
+                    }
+
+                    const status = document.getElementById('game-status');
+
+                    if (data.winner !== null) {
+                        status.textContent = 'Winner: ' + data.winner;
+                    } else if (data.game_over) {
+                        status.textContent = 'Game is a draw!';
+                    } else {
+                        status.textContent = 'Current turn: ' + data.current_player;
+                    }
+
+                    document.getElementById('nodes-explored').textContent =
+                        'Nodes explored: ' + data.nodes_explored;
+
+                    if (data.game_over) break;
+
+                    // Pause so we can watch each move
+                    await new Promise(resolve => setTimeout(resolve, 700));
+                }
+            } catch (error) {
+                console.error(error);
+                alert('AI vs AI game failed. Please check Flask.');
+            } finally {
+                isProcessing = false;
+            }
+        });
+        // Step 32.8 - Show AI vs AI controls only in AI vs AI mode
+            const gameModeSelect = document.getElementById('gameMode');
+            const aiAiControls = document.getElementById('ai-ai-controls');
+
+            function updateGameModeControls() {
+                if (gameModeSelect.value === 'ai-ai') {
+                    aiAiControls.style.display = 'block';
+                } else {
+                    aiAiControls.style.display = 'none';
+                }
+            }
+
+            gameModeSelect.addEventListener('change', updateGameModeControls);
+
+            // Set the correct visibility when the page loads
+            updateGameModeControls();
     </script>
 </body>
 </html>
