@@ -1,0 +1,277 @@
+<!-- 22 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Tic-Tac-Toe AI Visualizer</title>
+    <style>
+    /* Arrange nine cells into three columns */
+    .board {
+        display: grid;
+        grid-template-columns: repeat(3, 80px);
+        gap: 5px;
+    }
+
+    /* Style each square */
+    .cell {
+        width: 80px;
+        height: 80px;
+        font-size: 32px;
+        cursor: pointer;
+    }
+    #score-matrix {
+    display: grid;
+    grid-template-columns: repeat(3, 60px);
+    gap: 5px;
+    }
+
+    #score-matrix span {
+        width: 60px;
+        height: 60px;
+        border: 1px solid #999;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 20px;
+    }
+    .selected-score {
+        background-color: #c8f7c5;
+        border: 2px solid green !important;
+        font-weight: bold;
+    }
+</style>
+</head>
+<body>
+    <!-- Main heading of the application -->
+    <h1>Tic-Tac-Toe AI Visualizer</h1>
+
+    <!-- Short description of the application -->
+    <p>Play against Random, Heuristic, or Minimax AI.</p>
+    <!-- Select the AI opponent -->
+    <label for="agent-select">Choose AI opponent:</label>
+
+    <select id="agent-select">
+        <option value="random">Random Agent</option>
+        <option value="heuristic">Heuristic Agent</option>
+        <option value="minimax">Minimax Agent</option>
+    </select>
+
+    <p></p>
+    <!-- Tic-Tac-Toe game board -->
+    <div class="board">
+        <button class="cell" id="cell-0"></button>
+        <button class="cell" id="cell-1"></button>
+        <button class="cell" id="cell-2"></button>
+
+        <button class="cell" id="cell-3"></button>
+        <button class="cell" id="cell-4"></button>
+        <button class="cell" id="cell-5"></button>
+
+        <button class="cell" id="cell-6"></button>
+        <button class="cell" id="cell-7"></button>
+        <button class="cell" id="cell-8"></button>
+    </div>
+    <!-- Button to start a new game -->
+    <button id="reset-btn">Reset Game</button>
+    <!-- Step 27: Bot-versus-Bot Benchmarking -->
+    <h3>Bot-versus-Bot Benchmarking</h3>
+
+    <p>Choose two AI agents and compare their performance over 50 games.</p>
+
+    <button id="benchmark-btn">Run Benchmark</button>
+    <label for="benchmark-agent1">Player X:</label>
+    <select id="benchmark-agent1">
+        <option value="minimax">Minimax</option>
+        <option value="heuristic">Heuristic</option>
+        <option value="random">Random</option>
+    </select>
+
+    <label for="benchmark-agent2">Player O:</label>
+    <select id="benchmark-agent2">
+        <option value="random">Random</option>
+        <option value="heuristic">Heuristic</option>
+        <option value="minimax">Minimax</option>
+    </select>
+
+    <p id="benchmark-results"></p>
+
+    <!-- Display the current game status -->
+    <p id="game-status">Current turn: X</p>
+
+    <p id="nodes-explored">Nodes explored: 0</p>
+
+    <!-- Minimax move score visualization -->
+    <h3>Minimax Move Scores (Before AI Move)</h3>
+    <p>Positive = AI win | 0 = Draw | Negative = AI loss. Higher scores are better for the AI.</p>
+    <div id="score-matrix"></div>
+
+    <!-- JavaScript for handling cell clicks -->
+    <script>
+        // Get all nine cells
+        const cells = document.querySelectorAll('.cell');
+        let isProcessing = false;
+        // Add a click event to each cell
+        for (let i = 0; i < cells.length; i++) {
+            cells[i].addEventListener('click', async function() {
+                // Prevent another click while the AI is playing
+                if (isProcessing || 
+                    document.getElementById('game-status').textContent !== "Current turn: X") {
+                    return;
+                }
+
+                isProcessing = true;
+                // Send the clicked position to Flask
+                const response = await fetch('/move', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({position: i})
+                });
+
+        // Receive the updated game state
+        const data = await response.json();
+
+        // Update the board if the move was valid
+        if (data.success)
+        {
+            for (let j = 0; j < cells.length; j++) 
+            {
+                cells[j].textContent = data.board[j];
+            }
+            // Display the game status
+            const status = document.getElementById('game-status');
+
+            if (data.winner !== null) 
+            {
+                status.textContent = "Winner: " + data.winner;
+            } else if (data.game_over) 
+            {
+                status.textContent = "Game is a draw!";
+            } else 
+            {
+                status.textContent = "Current turn: " + data.current_player;
+            }
+        }
+        // Let the AI respond after the human plays
+        if (data.success && !data.game_over) 
+        {
+        
+
+            // Get the selected AI opponent
+        const selectedAgent = document.getElementById('agent-select').value;
+
+        // Send the selected agent to Flask
+        const aiResponse = await fetch('/ai-move', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({agent: selectedAgent})});
+
+        const aiData = await aiResponse.json();
+        // Debug the nodes received from Flask
+        console.log("Nodes received:", aiData.nodes_explored);
+
+        if (aiData.success) {
+                // Display the board after the AI move
+                for (let j = 0; j < cells.length; j++) {
+                    cells[j].textContent = aiData.board[j];
+                }
+
+                // Update the game status
+                const status = document.getElementById('game-status');
+
+                if (aiData.winner !== null) {
+                    status.textContent = "Winner: " + aiData.winner;
+                } else if (aiData.game_over) {
+                    status.textContent = "Game is a draw!";
+                } else {
+                    status.textContent = "Current turn: " + aiData.current_player;
+                }
+                // Display Minimax search statistics
+                document.getElementById('nodes-explored').textContent = 
+                    "Nodes explored: " + aiData.nodes_explored;
+                    // Display Minimax move scores
+                const scoreMatrix = document.getElementById('score-matrix');
+
+                scoreMatrix.innerHTML = '';
+
+                if (selectedAgent === 'minimax') {
+                    for (let i = 0; i < 9; i++) {
+                        const scoreCell = document.createElement('span');
+                        // Highlight the position selected by Minimax
+                        if (i === aiData.position) {
+                            scoreCell.classList.add('selected-score');
+                        }
+
+                        if (aiData.move_scores[i] !== undefined) {
+                            scoreCell.textContent = aiData.move_scores[i];
+                        } else {
+                            scoreCell.textContent = '-';
+                        }
+
+                        scoreMatrix.appendChild(scoreCell);
+                    }
+                }
+                            }
+                        }
+         // Allow the next human move
+        isProcessing = false;
+        });
+        }
+
+        // Reset the game when the button is clicked
+        document.getElementById('reset-btn').addEventListener('click', async function() {
+        // Do not reset while a move is processing
+        if (isProcessing) {
+            return;
+        }
+
+        const response = await fetch('/reset', {
+            method: 'POST'
+        });
+
+        const data = await response.json();
+
+        // Clear the board
+        for (let i = 0; i < cells.length; i++) {
+            cells[i].textContent = data.board[i];
+        }
+        // Reset the status message
+        document.getElementById('game-status').textContent = "Current turn: X";
+        // Reset the nodes explored
+        document.getElementById('nodes-explored').textContent = "Nodes explored: 0";
+        // Clear the previous Minimax scores
+        document.getElementById('score-matrix').innerHTML = '';
+        
+        });
+        // Step 27 - Run Bot-versus-Bot Benchmark
+        document.getElementById('benchmark-btn').addEventListener('click', async function() {
+
+            const resultsElement = document.getElementById('benchmark-results');
+
+            resultsElement.textContent = 'Running benchmark...';
+
+            // Get the selected agents
+            const agent1 = document.getElementById('benchmark-agent1').value;
+            const agent2 = document.getElementById('benchmark-agent2').value;
+
+            // Send the selected agents to Flask
+            const response = await fetch('/benchmark', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    agent1: agent1,
+                    agent2: agent2
+                })
+            });
+
+            const data = await response.json();
+
+            resultsElement.textContent =
+                agent1 + ' (X) wins: ' + data.agent1_wins +
+                ' | ' + agent2 + ' (O) wins: ' + data.agent2_wins +
+                ' | Draws: ' + data.draws;
+            });
+    </script>
+</body>
+</html>
